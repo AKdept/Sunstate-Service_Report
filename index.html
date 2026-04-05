@@ -1519,7 +1519,7 @@ async function submitReport(){
       payload._queuedAt=new Date().toISOString();
       queue.push(payload);
       saveQueue(queue);
-      alert('❌ Submit failed. Saved to queue ('+queue.length+'/'+MAX_QUEUE+').\nTap "Resend Queued" from the menu when back online.');
+      alert('❌ Submit failed.\nError: '+err.message+'\n\nSaved to queue ('+queue.length+'/'+MAX_QUEUE+').');
       showStatusBar('❌ Failed — saved to queue',true);
     }catch(e2){
       alert('❌ Submit failed and could not save to queue.\nError: '+e2.message);
