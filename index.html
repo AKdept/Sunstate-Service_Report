@@ -1482,7 +1482,8 @@ async function buildPayload(){
 async function sendPayload(payload){
   const res=await fetch(GAS_URL,{
     method:'POST',
-    headers:{'Content-Type':'application/json'},
+    redirect:'follow',
+    headers:{'Content-Type':'text/plain'},
     body:JSON.stringify(payload)
   });
   const json=await res.json();
