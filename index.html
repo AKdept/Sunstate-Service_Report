@@ -1521,8 +1521,9 @@ function saveQueue(q){
 async function buildPayload(){
   const photoData=[];
   for(const ph of photos){
-    if(ph&&ph.src){
-      photoData.push({data:ph.src,mimeType:'image/jpeg'});
+    const src=ph.annotated||ph.dataUrl;
+    if(src){
+      photoData.push({data:src,mimeType:'image/jpeg'});
     }
   }
   return{
@@ -1598,32 +1599,6 @@ async function submitReport(){
       alert('❌ Submit failed and could not save to queue.\nError: '+e2.message);
       showStatusBar('❌ Failed — could not queue',true);
     }
-  }
-}
-
-async function resendQueue(){
-  const queue=getQueue();
-  if(queue.length===0){alert('No queued reports.');return;}
-  if(!confirm('Resend '+queue.length+' queued report(s)?'))return;
-  let sent=0,failed=0;
-  const remaining=[];
-  showStatusBar('⏳ Resending '+queue.length+' queued...',false);
-  for(const payload of queue){
-    try{
-      await sendPayload(payload);
-      sent++;
-    }catch(e){
-      failed++;
-      remaining.push(payload);
-    }
-  }
-  saveQueue(remaining);
-  const msg='Resend complete: '+sent+' sent, '+failed+' failed.';
-  alert(msg);
-  showStatusBar(failed>0?'⚠️ '+msg:'✅ '+msg,failed>0);
-  if(sent>0){
-    localStorage.setItem(LAST_SUBMIT_KEY,new Date().toISOString());
-    updateLastSubmitInfo();
   }
 }
 
