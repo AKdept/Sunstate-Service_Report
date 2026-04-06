@@ -19,8 +19,25 @@ body{font-family:Arial,sans-serif;font-size:14px;background:#f0f0f0;color:#222;}
 .sbtn-print{background:#27ae60;color:white;}
 .sbtn-submit{background:#1565c0;color:white;}
 .sbtn-resend{background:#6a1b9a;color:white;}
+.sbtn-history{background:#00695c;color:white;}
 .sidebar-submit-info{font-size:10px;color:#a8e6b0;padding:2px 4px;line-height:1.5;}
 .sidebar-version{font-size:10px;color:rgba(255,255,255,0.3);text-align:right;padding:4px 4px 0;margin-top:auto;}
+
+/* HISTORY MODAL */
+.history-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1100;display:none;align-items:center;justify-content:center;}
+.history-modal-overlay.open{display:flex;}
+.history-modal-box{background:white;border-radius:10px;width:92%;max-width:480px;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;}
+.history-modal-title{background:#00695c;color:white;padding:12px 14px;font-size:14px;font-weight:bold;display:flex;justify-content:space-between;align-items:center;}
+.history-modal-close{background:none;border:none;color:white;font-size:18px;cursor:pointer;}
+.history-list{flex:1;overflow-y:auto;padding:8px;}
+.history-item{padding:10px 8px;border-bottom:1px solid #eee;font-size:13px;}
+.history-item:last-child{border-bottom:none;}
+.history-item-reportno{font-weight:bold;color:#00695c;font-size:12px;}
+.history-item-detail{color:#555;font-size:11px;margin-top:2px;}
+.history-item-time{color:#aaa;font-size:10px;margin-top:2px;}
+.history-empty{text-align:center;color:#aaa;padding:24px;font-size:13px;}
+.history-modal-done-bar{padding:10px 12px;border-top:1px solid #eee;text-align:right;}
+.history-modal-done{background:#00695c;color:white;border:none;border-radius:6px;padding:8px 20px;font-size:13px;font-weight:bold;cursor:pointer;}
 
 /* QUEUE BADGE */
 .queue-badge{background:#e74c3c;color:white;font-size:10px;font-weight:bold;border-radius:10px;padding:1px 6px;margin-left:4px;display:none;}
@@ -361,9 +378,10 @@ body{font-family:Arial,sans-serif;font-size:14px;background:#f0f0f0;color:#222;}
   <button class="sbtn sbtn-print" onclick="printReport();closeSidebar()">🖨 Download PDF</button>
   <button class="sbtn sbtn-submit" onclick="submitReport();closeSidebar()">📤 Submit Report</button>
   <button class="sbtn sbtn-resend" id="resendBtn" onclick="openQueueModal();closeSidebar()" style="display:none;">🔄 Queued (<span id="resendCount">0</span>)</button>
+  <button class="sbtn sbtn-history" onclick="openHistoryModal();closeSidebar()">📋 Sent History</button>
   <button class="sbtn sbtn-clear" onclick="clearAll();closeSidebar()">🗑 Clear All</button>
   <div class="sidebar-submit-info" id="lastSubmitInfo"></div>
-  <div class="sidebar-version">Ver 0.1.2</div>
+  <div class="sidebar-version">Ver 0.1.3</div>
 </div>
 
 <div class="topbar">
@@ -488,6 +506,20 @@ body{font-family:Arial,sans-serif;font-size:14px;background:#f0f0f0;color:#222;}
     <div class="queue-modal-actions">
       <button class="queue-btn-delete" onclick="deleteSelectedQueue()">🗑 Delete Selected</button>
       <button class="queue-btn-resend" onclick="resendSelectedQueue()">📤 Resend Selected</button>
+    </div>
+  </div>
+</div>
+
+<!-- HISTORY MODAL -->
+<div class="history-modal-overlay" id="historyModalOverlay" onclick="handleHistoryOverlayClick(event)">
+  <div class="history-modal-box">
+    <div class="history-modal-title">
+      <span>📋 Sent History (Last 5)</span>
+      <button class="history-modal-close" onclick="closeHistoryModal()">✕</button>
+    </div>
+    <div class="history-list" id="historyList"></div>
+    <div class="history-modal-done-bar">
+      <button class="history-modal-done" onclick="closeHistoryModal()">Close</button>
     </div>
   </div>
 </div>
@@ -1539,6 +1571,12 @@ async function submitReport(){
     await sendPayload(payload);
     const ts=new Date().toISOString();
     localStorage.setItem(LAST_SUBMIT_KEY,ts);
+    saveSentHistory({
+      reportNo:data.reportNo||'',
+      serviceDate:data.serviceDate||'',
+      customer:data.customer||'',
+      sentAt:ts
+    });
     updateLastSubmitInfo();
     showStatusBar('✅ Submitted successfully!',false);
   }catch(err){
@@ -1664,6 +1702,47 @@ window.addEventListener('load',()=>{
   updateQueueUI();
   updateLastSubmitInfo();
 },true);
+
+// ===== SENT HISTORY =====
+const HISTORY_KEY='sunstate_sent_history';
+const MAX_HISTORY=5;
+
+function saveSentHistory(entry){
+  try{
+    const history=getSentHistory();
+    history.unshift(entry);
+    if(history.length>MAX_HISTORY)history.splice(MAX_HISTORY);
+    localStorage.setItem(HISTORY_KEY,JSON.stringify(history));
+  }catch(e){console.warn('History save failed:',e);}
+}
+function getSentHistory(){
+  try{return JSON.parse(localStorage.getItem(HISTORY_KEY)||'[]');}catch{return[];}
+}
+function openHistoryModal(){
+  renderHistoryList();
+  document.getElementById('historyModalOverlay').classList.add('open');
+}
+function closeHistoryModal(){
+  document.getElementById('historyModalOverlay').classList.remove('open');
+}
+function handleHistoryOverlayClick(e){
+  if(e.target===document.getElementById('historyModalOverlay'))closeHistoryModal();
+}
+function renderHistoryList(){
+  const history=getSentHistory();
+  const list=document.getElementById('historyList');
+  if(history.length===0){
+    list.innerHTML='<div class="history-empty">No sent history yet.</div>';
+    return;
+  }
+  list.innerHTML=history.map((h,i)=>`
+    <div class="history-item">
+      <div class="history-item-reportno">${i+1}. ${h.reportNo||'(No Report No.)'}</div>
+      <div class="history-item-detail">${h.serviceDate||''}｜ ${h.customer||'(No Client)'}</div>
+      <div class="history-item-time">Sent: ${h.sentAt?new Date(h.sentAt).toLocaleString():''}</div>
+    </div>
+  `).join('');
+}
 </script>
 </body>
 </html>
