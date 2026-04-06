@@ -20,6 +20,7 @@ body{font-family:Arial,sans-serif;font-size:14px;background:#f0f0f0;color:#222;}
 .sbtn-submit{background:#1565c0;color:white;}
 .sbtn-resend{background:#6a1b9a;color:white;}
 .sidebar-submit-info{font-size:10px;color:#a8e6b0;padding:2px 4px;line-height:1.5;}
+.sidebar-version{font-size:10px;color:rgba(255,255,255,0.3);text-align:right;padding:4px 4px 0;margin-top:auto;}
 
 /* QUEUE BADGE */
 .queue-badge{background:#e74c3c;color:white;font-size:10px;font-weight:bold;border-radius:10px;padding:1px 6px;margin-left:4px;display:none;}
@@ -28,6 +29,24 @@ body{font-family:Arial,sans-serif;font-size:14px;background:#f0f0f0;color:#222;}
 /* SUBMIT STATUS BAR */
 .submit-status-bar{background:#0d3d1a;color:#a8e6b0;font-size:10px;padding:4px 12px;text-align:center;display:none;}
 .submit-status-bar.visible{display:block;}
+
+/* QUEUE MODAL */
+.queue-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1100;display:none;align-items:center;justify-content:center;}
+.queue-modal-overlay.open{display:flex;}
+.queue-modal-box{background:white;border-radius:10px;width:92%;max-width:480px;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;}
+.queue-modal-title{background:#1a5c2a;color:white;padding:12px 14px;font-size:14px;font-weight:bold;display:flex;justify-content:space-between;align-items:center;}
+.queue-modal-close{background:none;border:none;color:white;font-size:18px;cursor:pointer;}
+.queue-list{flex:1;overflow-y:auto;padding:8px;}
+.queue-item{display:flex;align-items:center;gap:10px;padding:10px 8px;border-bottom:1px solid #eee;font-size:13px;}
+.queue-item:last-child{border-bottom:none;}
+.queue-item input[type=checkbox]{width:18px;height:18px;accent-color:#1a5c2a;flex-shrink:0;}
+.queue-item-info{flex:1;min-width:0;}
+.queue-item-reportno{font-weight:bold;color:#1a5c2a;font-size:12px;}
+.queue-item-detail{color:#666;font-size:11px;margin-top:2px;}
+.queue-modal-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px 12px;border-top:1px solid #eee;}
+.queue-btn-delete{background:#e74c3c;color:white;border:none;border-radius:6px;padding:10px;font-size:13px;font-weight:bold;cursor:pointer;}
+.queue-btn-resend{background:#1565c0;color:white;border:none;border-radius:6px;padding:10px;font-size:13px;font-weight:bold;cursor:pointer;}
+.queue-empty{text-align:center;color:#aaa;padding:24px;font-size:13px;}
 .sidebar-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:999;display:none;}
 .sidebar-overlay.open{display:block;}
 
@@ -341,9 +360,10 @@ body{font-family:Arial,sans-serif;font-size:14px;background:#f0f0f0;color:#222;}
   <button class="sbtn sbtn-load" onclick="openSlotModal('load');closeSidebar()">📂 Load</button>
   <button class="sbtn sbtn-print" onclick="printReport();closeSidebar()">🖨 Download PDF</button>
   <button class="sbtn sbtn-submit" onclick="submitReport();closeSidebar()">📤 Submit Report</button>
-  <button class="sbtn sbtn-resend" id="resendBtn" onclick="resendQueue();closeSidebar()" style="display:none;">🔄 Resend Queued (<span id="resendCount">0</span>)</button>
+  <button class="sbtn sbtn-resend" id="resendBtn" onclick="openQueueModal();closeSidebar()" style="display:none;">🔄 Queued (<span id="resendCount">0</span>)</button>
   <button class="sbtn sbtn-clear" onclick="clearAll();closeSidebar()">🗑 Clear All</button>
   <div class="sidebar-submit-info" id="lastSubmitInfo"></div>
+  <div class="sidebar-version">Ver 0.1.2</div>
 </div>
 
 <div class="topbar">
@@ -453,6 +473,21 @@ body{font-family:Arial,sans-serif;font-size:14px;background:#f0f0f0;color:#222;}
     <div class="slot-list" id="slotList"></div>
     <div class="slot-modal-done-bar">
       <button class="slot-modal-done" onclick="closeSlotModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- QUEUE MODAL -->
+<div class="queue-modal-overlay" id="queueModalOverlay" onclick="handleQueueOverlayClick(event)">
+  <div class="queue-modal-box">
+    <div class="queue-modal-title">
+      <span>🔄 Queued Reports</span>
+      <button class="queue-modal-close" onclick="closeQueueModal()">✕</button>
+    </div>
+    <div class="queue-list" id="queueList"></div>
+    <div class="queue-modal-actions">
+      <button class="queue-btn-delete" onclick="deleteSelectedQueue()">🗑 Delete Selected</button>
+      <button class="queue-btn-resend" onclick="resendSelectedQueue()">📤 Resend Selected</button>
     </div>
   </div>
 </div>
@@ -1547,6 +1582,76 @@ async function resendQueue(){
   saveQueue(remaining);
   const msg='Resend complete: '+sent+' sent, '+failed+' failed.';
   alert(msg);
+  showStatusBar(failed>0?'⚠️ '+msg:'✅ '+msg,failed>0);
+  if(sent>0){
+    localStorage.setItem(LAST_SUBMIT_KEY,new Date().toISOString());
+    updateLastSubmitInfo();
+  }
+}
+
+// ===== QUEUE MODAL =====
+function openQueueModal(){
+  renderQueueList();
+  document.getElementById('queueModalOverlay').classList.add('open');
+}
+function closeQueueModal(){
+  document.getElementById('queueModalOverlay').classList.remove('open');
+}
+function handleQueueOverlayClick(e){
+  if(e.target===document.getElementById('queueModalOverlay'))closeQueueModal();
+}
+function renderQueueList(){
+  const queue=getQueue();
+  const list=document.getElementById('queueList');
+  if(queue.length===0){
+    list.innerHTML='<div class="queue-empty">No queued reports.</div>';
+    return;
+  }
+  list.innerHTML=queue.map((q,i)=>`
+    <div class="queue-item">
+      <input type="checkbox" id="qcheck_${i}" value="${i}">
+      <div class="queue-item-info">
+        <div class="queue-item-reportno">${q.reportNo||'(No Report No.)'}</div>
+        <div class="queue-item-detail">${q.serviceDate||''}｜ ${q.customer||'(No Client)'}</div>
+        <div class="queue-item-detail" style="color:#aaa;">${q._queuedAt?'Queued: '+new Date(q._queuedAt).toLocaleString():''}</div>
+      </div>
+    </div>
+  `).join('');
+}
+function getSelectedQueueIndices(){
+  const checkboxes=document.querySelectorAll('#queueList input[type=checkbox]:checked');
+  return Array.from(checkboxes).map(cb=>parseInt(cb.value));
+}
+function deleteSelectedQueue(){
+  const indices=getSelectedQueueIndices();
+  if(indices.length===0){alert('Please select items to delete.');return;}
+  if(!confirm('Delete '+indices.length+' selected item(s)?'))return;
+  const queue=getQueue();
+  const remaining=queue.filter((_,i)=>!indices.includes(i));
+  saveQueue(remaining);
+  renderQueueList();
+  showStatusBar('🗑 Deleted '+indices.length+' queued item(s).',false);
+}
+async function resendSelectedQueue(){
+  const indices=getSelectedQueueIndices();
+  if(indices.length===0){alert('Please select items to resend.');return;}
+  if(!confirm('Resend '+indices.length+' selected item(s)?'))return;
+  const queue=getQueue();
+  let sent=0,failed=0;
+  const remaining=[...queue];
+  showStatusBar('⏳ Resending '+indices.length+' selected...',false);
+  for(const i of indices.sort((a,b)=>b-a)){
+    try{
+      await sendPayload(queue[i]);
+      remaining.splice(i,1);
+      sent++;
+    }catch(e){
+      failed++;
+    }
+  }
+  saveQueue(remaining);
+  renderQueueList();
+  const msg='Resend complete: '+sent+' sent, '+failed+' failed.';
   showStatusBar(failed>0?'⚠️ '+msg:'✅ '+msg,failed>0);
   if(sent>0){
     localStorage.setItem(LAST_SUBMIT_KEY,new Date().toISOString());
