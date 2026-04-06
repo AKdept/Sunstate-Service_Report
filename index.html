@@ -1656,6 +1656,12 @@ async function resendSelectedQueue(){
   for(const i of indices.sort((a,b)=>b-a)){
     try{
       await sendPayload(queue[i]);
+      saveSentHistory({
+        reportNo:queue[i].reportNo||'',
+        serviceDate:queue[i].serviceDate||'',
+        customer:queue[i].customer||'',
+        sentAt:new Date().toISOString()
+      });
       remaining.splice(i,1);
       sent++;
     }catch(e){
